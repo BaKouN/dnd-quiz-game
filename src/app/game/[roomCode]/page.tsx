@@ -1,83 +1,50 @@
-// app/game/[roomCode]/page.tsx
+// app/game/[roomCode]/page.tsx - Version avec hooks
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
 import { useParams } from 'next/navigation'
-import { gameEngine } from '@/lib/game/gameEngine'
-import { supabase } from '@/lib/supabase'
-
-import { Button } from '@/components/ui/Button'
+import { useGameState } from '@/lib/hooks/useGameState'
+import { useRealtimeGame } from '@/lib/hooks/useRealtimeGame'
 import { GameStats } from '@/components/game/GameStats'
 import { QuestionDisplay } from '@/components/game/QuestionDisplay'
 import { Leaderboard } from '@/components/game/Leaderboard'
+import { Button } from '@/components/ui/Button'
+import { LoadingSpinner } from '@/components/ui/LoadingSpinner'
 
 export default function GameHost() {
   const params = useParams()
   const roomCode = params.roomCode as string
   
-  const [gameState, setGameState] = useState<any>(null)
-  const [loading, setLoading] = useState(true)
+  const { 
+    gameState, 
+    loading, 
+    error, 
+    fetchGameState, 
+    startGame, 
+    nextQuestion 
+  } = useGameState(roomCode)
 
-  const fetchGameState = useCallback(async () => {
-    try {
-      const state = await gameEngine.getGameState(roomCode)
-      setGameState(state)
-      setLoading(false)
-    } catch (error) {
-      console.error('Error fetching game state:', error)
-      setLoading(false)
-    }
-  }, [roomCode])
-
-  useEffect(() => {
-    fetchGameState()
-    
-    // Subscribe to realtime changes
-    const channel = supabase
-      .channel(`game-${roomCode}`)
-      .on('postgres_changes', 
-        { event: '*', schema: 'public', table: 'games', filter: `room_code=eq.${roomCode}` },
-        fetchGameState
-      )
-      .on('postgres_changes',
-        { event: '*', schema: 'public', table: 'players' },
-        fetchGameState
-      )
-      .subscribe()
-
-    return () => {
-      supabase.removeChannel(channel)
-    }
-  }, [roomCode, fetchGameState])
-
-  const startGame = async () => {
-    try {
-      await gameEngine.startGame(roomCode)
-    } catch (error) {
-      console.error('Error starting game:', error)
-    }
-  }
-
-  const nextQuestion = async () => {
-    try {
-      await gameEngine.nextQuestion(roomCode)
-    } catch (error) {
-      console.error('Error going to next question:', error)
-    }
-  }
+  // Setup realtime subscriptions
+  useRealtimeGame({
+    roomCode,
+    onGameUpdate: fetchGameState,
+    onPlayerUpdate: fetchGameState
+  })
 
   if (loading) {
     return (
       <div className="min-h-screen bg-slate-900 text-white flex items-center justify-center">
-        <div className="text-2xl">Loading game...</div>
+        <div className="text-center">
+          <LoadingSpinner size="lg" className="mx-auto mb-4" />
+          <div className="text-2xl">Loading game...</div>
+        </div>
       </div>
     )
   }
 
-  if (!gameState) {
+  if (error || !gameState) {
     return (
       <div className="min-h-screen bg-slate-900 text-white flex items-center justify-center">
-        <div className="text-2xl text-red-500">Game not found</div>
+        <div className="text-2xl text-red-500">{error || 'Game not found'}</div>
       </div>
     )
   }
@@ -92,7 +59,7 @@ export default function GameHost() {
         </div>
       </div>
 
-      {/* Game Status */}
+      {/* Game Stats */}
       <GameStats 
         totalPlayers={gameState.totalPlayers}
         currentQuestion={gameState.game.current_question}
@@ -101,14 +68,18 @@ export default function GameHost() {
 
       {/* Question Display */}
       {gameState.currentQuestion && (
-        <QuestionDisplay 
-          question={gameState.currentQuestion}
-          size="desktop"
-        />
+        <div className="mb-8">
+          <QuestionDisplay 
+            question={gameState.currentQuestion}
+            size="desktop"
+          />
+        </div>
       )}
 
-      {/* Players List */}
-      <Leaderboard players={gameState.players} />
+      {/* Leaderboard */}
+      <div className="mb-8">
+        <Leaderboard players={gameState.players} />
+      </div>
 
       {/* Controls */}
       <div className="text-center space-x-4">
