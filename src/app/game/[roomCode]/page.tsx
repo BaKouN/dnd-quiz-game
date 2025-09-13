@@ -6,6 +6,11 @@ import { useParams } from 'next/navigation'
 import { gameEngine } from '@/lib/game/gameEngine'
 import { supabase } from '@/lib/supabase'
 
+import { Button } from '@/components/ui/Button'
+import { GameStats } from '@/components/game/GameStats'
+import { QuestionDisplay } from '@/components/game/QuestionDisplay'
+import { Leaderboard } from '@/components/game/Leaderboard'
+
 export default function GameHost() {
   const params = useParams()
   const roomCode = params.roomCode as string
@@ -88,76 +93,35 @@ export default function GameHost() {
       </div>
 
       {/* Game Status */}
-      <div className="grid grid-cols-3 gap-4 mb-8">
-        <div className="bg-slate-800 p-4 rounded text-center">
-          <div className="text-2xl font-bold">{gameState.totalPlayers}</div>
-          <div className="text-gray-400">Players</div>
-        </div>
-        <div className="bg-slate-800 p-4 rounded text-center">
-          <div className="text-2xl font-bold">{gameState.game.current_question}/5</div>
-          <div className="text-gray-400">Question</div>
-        </div>
-        <div className="bg-slate-800 p-4 rounded text-center">
-          <div className="text-2xl font-bold capitalize">{gameState.game.status}</div>
-          <div className="text-gray-400">Status</div>
-        </div>
-      </div>
+      <GameStats 
+        totalPlayers={gameState.totalPlayers}
+        currentQuestion={gameState.game.current_question}
+        gameStatus={gameState.game.status}
+      />
 
       {/* Question Display */}
       {gameState.currentQuestion && (
-        <div className="bg-slate-800 p-8 rounded-lg mb-8 text-center">
-          <div className="text-3xl font-bold text-orange-500 mb-4">
-            {gameState.currentQuestion.value.toLocaleString()} LEADS
-          </div>
-          <div className="text-2xl mb-6">
-            {gameState.currentQuestion.question}
-          </div>
-          <div className="grid grid-cols-2 gap-4">
-            {gameState.currentQuestion.answers.map((answer: string, index: number) => (
-              <div key={index} className="bg-slate-700 p-4 rounded text-lg">
-                <span className="font-bold text-orange-500">{'ABCD'[index]}: </span>
-                {answer}
-              </div>
-            ))}
-          </div>
-        </div>
+        <QuestionDisplay 
+          question={gameState.currentQuestion}
+          size="desktop"
+        />
       )}
 
       {/* Players List */}
-      <div className="bg-slate-800 p-6 rounded-lg mb-8">
-        <h3 className="text-xl font-bold mb-4">Leaderboard</h3>
-        {gameState.players.length === 0 ? (
-          <div className="text-gray-400 text-center">No players yet...</div>
-        ) : (
-          <div className="space-y-2">
-            {gameState.players.map((player: any, index: number) => (
-              <div key={player.id} className="flex justify-between items-center">
-                <span>{index + 1}. {player.name}</span>
-                <span className="font-bold">{player.score.toLocaleString()} leads</span>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
+      <Leaderboard players={gameState.players} />
 
       {/* Controls */}
       <div className="text-center space-x-4">
         {gameState.game.status === 'waiting' && (
-          <button
-            onClick={startGame}
-            className="px-6 py-3 bg-green-500 text-white rounded-lg font-bold hover:bg-green-600"
-          >
+          <Button onClick={startGame} variant="success" size="lg">
             Start Game
-          </button>
+          </Button>
         )}
         
         {gameState.game.status === 'playing' && (
-          <button
-            onClick={nextQuestion}
-            className="px-6 py-3 bg-blue-500 text-white rounded-lg font-bold hover:bg-blue-600"
-          >
+          <Button onClick={nextQuestion} variant="primary" size="lg">
             Next Question
-          </button>
+          </Button>
         )}
         
         {gameState.game.status === 'finished' && (
