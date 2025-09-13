@@ -24,8 +24,8 @@ export default function JoinGame() {
     
     try {
       const playerId = await gameEngine.joinGame(roomCode, name.trim(), email.trim() || undefined)
-      // Pour l'instant, on reste sur cette page et on montre le succès
-      alert(`Joined successfully! Player ID: ${playerId}`)
+      // Rediriger vers l'interface de jeu
+      router.push(`/play/${roomCode}/${playerId}`)
     } catch (error) {
       console.error('Error joining game:', error)
       setError('Impossible de rejoindre la partie. Vérifiez le code.')
