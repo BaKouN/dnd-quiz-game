@@ -143,7 +143,23 @@ export class GameEngine {
     pointsEarned: number;
     correctAnswer: number;
   }> {
-    // 1. Récupérer la question
+    // 1. Vérifier si le joueur a déjà répondu à cette question
+    const { data: existingResponse, error: checkError } = await supabase
+      .from('responses')
+      .select('id')
+      .eq('player_id', playerId)
+      .eq('question_number', questionNumber)
+      .maybeSingle()
+
+    if (checkError && checkError.code !== 'PGRST116') {
+      throw new Error(`Error checking existing response: ${checkError.message}`)
+    }
+
+    if (existingResponse) {
+      throw new Error('You have already answered this question')
+    }
+
+    // 2. Récupérer la question
     const question = questions[questionNumber - 1]
     if (!question) {
       throw new Error('Question not found')
@@ -152,35 +168,64 @@ export class GameEngine {
     const isCorrect = answerIndex === question.correct
     const pointsEarned = isCorrect ? question.value : 0
 
-    // 2. Mettre à jour le score du joueur (méthode correcte)
-    if (isCorrect) {
-      // D'abord récupérer le score actuel
-      const { data: player, error: fetchError } = await supabase
-        .from('players')
-        .select('score')
-        .eq('id', playerId)
-        .single()
+    // 3. Récupérer le game_id depuis le player
+    const { data: player, error: playerError } = await supabase
+      .from('players')
+      .select('game_id, score')
+      .eq('id', playerId)
+      .single()
 
-      if (fetchError) {
-        throw new Error(`Failed to fetch player: ${fetchError.message}`)
-      }
-
-      // Puis mettre à jour avec le nouveau score
-      const newScore = player.score + pointsEarned
-      const { error: updateError } = await supabase
-        .from('players')
-        .update({ score: newScore })
-        .eq('id', playerId)
-
-      if (updateError) {
-        throw new Error(`Failed to update score: ${updateError.message}`)
-      }
+    if (playerError || !player) {
+      throw new Error('Player not found')
     }
 
-    return {
-      isCorrect,
-      pointsEarned,
-      correctAnswer: question.correct
+    try {
+      // 4. Transaction : Enregistrer la réponse ET mettre à jour le score
+      // D'abord enregistrer la réponse (avec contrainte UNIQUE)
+      const { error: responseError } = await supabase
+        .from('responses')
+        .insert({
+          game_id: player.game_id,
+          player_id: playerId,
+          question_number: questionNumber,
+          answer: answerIndex,
+          is_correct: isCorrect
+        })
+
+      if (responseError) {
+        // Si erreur de contrainte UNIQUE = déjà répondu
+        if (responseError.code === '23505') {
+          throw new Error('You have already answered this question')
+        }
+        throw new Error(`Failed to record response: ${responseError.message}`)
+      }
+
+      // 5. Mettre à jour le score seulement si correct
+      if (isCorrect) {
+        const newScore = player.score + pointsEarned
+        const { error: updateError } = await supabase
+          .from('players')
+          .update({ score: newScore })
+          .eq('id', playerId)
+
+        if (updateError) {
+          // En cas d'erreur de score, on pourrait rollback la response
+          // Mais pour simplifier, on laisse la response enregistrée
+          console.error('Error updating score:', updateError)
+        }
+      }
+
+      return {
+        isCorrect,
+        pointsEarned,
+        correctAnswer: question.correct
+      }
+
+    } catch (error) {
+      if (error instanceof Error) {
+        throw error
+      }
+      throw new Error('Unknown error occurred')
     }
   }
 

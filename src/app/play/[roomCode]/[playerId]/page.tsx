@@ -18,6 +18,36 @@ export default function PlayerInterface() {
   const [hasAnswered, setHasAnswered] = useState(false)
   const [loading, setLoading] = useState(true)
 
+    const checkIfAnswered = useCallback(async () => {
+    if (!gameState || !playerId) return
+
+    try {
+      const { data, error } = await supabase
+        .from('responses')
+        .select('id, answer')
+        .eq('player_id', playerId)
+        .eq('question_number', gameState.game.current_question)
+        .maybeSingle()
+
+      if (error && error.code !== 'PGRST116') {
+        console.error('Error checking if answered:', error)
+        return
+      }
+
+      if (data) {
+        // Joueur a déjà répondu
+        setHasAnswered(true)
+        setSelectedAnswer(data.answer)
+      } else {
+        // Nouvelle question ou pas encore répondu
+        setHasAnswered(false)
+        setSelectedAnswer(null)
+      }
+    } catch (error) {
+      console.error('Error checking answer status:', error)
+    }
+  }, [gameState, playerId])
+
   const fetchGameData = useCallback(async () => {
     try {
       // Get game state
@@ -42,29 +72,57 @@ export default function PlayerInterface() {
 
   useEffect(() => {
     fetchGameData()
-    
-    // Subscribe to realtime changes
+  }, [fetchGameData])
+
+  useEffect(() => {
+    if (!gameState || !playerId) return
+
+    // Check answer status whenever gameState changes
+    const checkAnswer = async () => {
+      try {
+        const { data } = await supabase
+          .from('responses')
+          .select('id, answer')
+          .eq('player_id', playerId)
+          .eq('question_number', gameState.game.current_question)
+          .maybeSingle()
+
+        if (data) {
+          setHasAnswered(true)
+          setSelectedAnswer(data.answer)
+        } else {
+          setHasAnswered(false)
+          setSelectedAnswer(null)
+        }
+      } catch (error) {
+        console.error('Error checking answer:', error)
+      }
+    }
+
+    checkAnswer()
+
+    // Subscribe to realtime
     const channel = supabase
       .channel(`player-${playerId}`)
       .on('postgres_changes', 
         { event: '*', schema: 'public', table: 'games', filter: `room_code=eq.${roomCode}` },
-        () => {
-          fetchGameData()
-          // Reset answer state when question changes
-          setSelectedAnswer(null)
-          setHasAnswered(false)
-        }
+        fetchGameData
       )
       .on('postgres_changes',
         { event: '*', schema: 'public', table: 'players', filter: `id=eq.${playerId}` },
         fetchGameData
       )
+      .on('postgres_changes',
+        { event: '*', schema: 'public', table: 'responses' },
+        () => checkAnswer() // Wrapper pour éviter la Promise dans le callback
+      )
       .subscribe()
 
+    // ✅ Cleanup function synchrone
     return () => {
-      supabase.removeChannel(channel)
+      supabase.removeChannel(channel) // Pas d'await ici
     }
-  }, [roomCode, playerId, fetchGameData])
+  }, [gameState, playerId, roomCode, fetchGameData])
 
   const submitAnswer = async (answerIndex: number) => {
     if (hasAnswered || !gameState) return
@@ -90,9 +148,19 @@ export default function PlayerInterface() {
       }
     } catch (error) {
       console.error('Error submitting answer:', error)
-      // Reset on error
-      setSelectedAnswer(null)
-      setHasAnswered(false)
+      
+      // Show error message
+      if (error instanceof Error && error.message.includes('already answered')) {
+        alert('Vous avez déjà répondu à cette question !')
+      } else {
+        alert('Erreur lors de l\'envoi de la réponse')
+      }
+      
+      // Reset on error only if it's not "already answered"
+      if (!(error instanceof Error && error.message.includes('already answered'))) {
+        setSelectedAnswer(null)
+        setHasAnswered(false)
+      }
     }
   }
 
