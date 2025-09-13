@@ -138,6 +138,52 @@ export class GameEngine {
     return true
   }
 
+  async submitAnswer(playerId: string, questionNumber: number, answerIndex: number): Promise<{
+    isCorrect: boolean;
+    pointsEarned: number;
+    correctAnswer: number;
+  }> {
+    // 1. Récupérer la question
+    const question = questions[questionNumber - 1]
+    if (!question) {
+      throw new Error('Question not found')
+    }
+
+    const isCorrect = answerIndex === question.correct
+    const pointsEarned = isCorrect ? question.value : 0
+
+    // 2. Mettre à jour le score du joueur (méthode correcte)
+    if (isCorrect) {
+      // D'abord récupérer le score actuel
+      const { data: player, error: fetchError } = await supabase
+        .from('players')
+        .select('score')
+        .eq('id', playerId)
+        .single()
+
+      if (fetchError) {
+        throw new Error(`Failed to fetch player: ${fetchError.message}`)
+      }
+
+      // Puis mettre à jour avec le nouveau score
+      const newScore = player.score + pointsEarned
+      const { error: updateError } = await supabase
+        .from('players')
+        .update({ score: newScore })
+        .eq('id', playerId)
+
+      if (updateError) {
+        throw new Error(`Failed to update score: ${updateError.message}`)
+      }
+    }
+
+    return {
+      isCorrect,
+      pointsEarned,
+      correctAnswer: question.correct
+    }
+  }
+
   // Commencer le jeu
   async startGame(roomCode: string): Promise<void> {
     await supabase
@@ -171,6 +217,7 @@ export class GameEngine {
       })
       .eq('room_code', roomCode)
   }
+
 }
 
 // Instance globale

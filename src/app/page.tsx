@@ -47,6 +47,21 @@ export default function Home() {
     }
   }
 
+  const testAnswer = async () => {
+    if (!playerId) {
+      alert('Join a game first!')
+      return
+    }
+    
+    try {
+      // Test: réponse correcte à la question 1 (index 1 = "53 secondes")
+      const result = await gameEngine.submitAnswer(playerId, 1, 1)
+      console.log('Answer result:', result)
+    } catch (error) {
+      console.error('Error submitting answer:', error)
+    }
+  }
+
   return (
     <div className="p-8 space-y-4">
       <h1 className="text-2xl font-bold">Game Engine Test</h1>
@@ -68,6 +83,10 @@ export default function Home() {
         
         <button onClick={startGame} className="px-4 py-2 bg-orange-500 text-white rounded">
           Start Game
+        </button>
+
+        <button onClick={testAnswer} className="px-4 py-2 bg-red-500 text-white rounded">
+          Test Answer (Question 1, Correct)
         </button>
       </div>
 
