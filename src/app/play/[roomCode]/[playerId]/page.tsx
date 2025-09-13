@@ -7,6 +7,12 @@ import { supabase } from '@/lib/supabase'
 import { gameEngine } from '@/lib/game/gameEngine'
 import { questions } from '@/lib/game/questions'
 
+import { PlayerStats } from '@/components/game/PlayerStats'
+import { QuestionDisplay } from '@/components/game/QuestionDisplay'
+import { AnswerButtons } from '@/components/game/AnswerButtons'
+import { WaitingScreen } from '@/components/game/WaitingScreen'
+import { LoadingSpinner } from '@/components/ui/LoadingSpinner'
+
 export default function PlayerInterface() {
   const params = useParams()
   const roomCode = params.roomCode as string
@@ -168,6 +174,7 @@ export default function PlayerInterface() {
     return (
       <div className="min-h-screen bg-slate-900 text-white flex items-center justify-center">
         <div className="text-center">
+          <LoadingSpinner size="lg" className="mx-auto mb-4" />
           <div className="text-xl">Connexion au jeu...</div>
           <div className="text-sm text-gray-400 mt-2">Room: {roomCode}</div>
         </div>
@@ -192,35 +199,12 @@ export default function PlayerInterface() {
   if (gameState.game.status === 'waiting') {
     return (
       <div className="min-h-screen bg-slate-900 text-white p-6">
-        <div className="max-w-md mx-auto text-center">
-          <h1 className="text-2xl font-bold text-orange-500 mb-6">LEAD MILLIONAIRE</h1>
-          
-          <div className="bg-slate-800 p-6 rounded-lg mb-6">
-            <h2 className="text-xl font-bold mb-4">En attente...</h2>
-            <p className="text-gray-300">Le jeu va bientôt commencer !</p>
-          </div>
-
-          <div className="space-y-4">
-            <div className="bg-slate-800 p-4 rounded">
-              <div className="text-lg font-medium">{playerData.name}</div>
-              <div className="text-sm text-gray-400">Joueur connecté</div>
-            </div>
-            
-            <div className="bg-slate-800 p-4 rounded">
-              <div className="text-2xl font-bold text-orange-500">{playerData.score.toLocaleString()}</div>
-              <div className="text-sm text-gray-400">Leads actuels</div>
-            </div>
-
-            <div className="bg-slate-800 p-4 rounded">
-              <div className="text-lg font-bold">{gameState.totalPlayers}</div>
-              <div className="text-sm text-gray-400">Joueurs connectés</div>
-            </div>
-          </div>
-
-          <div className="mt-8 text-gray-400 text-sm">
-            <p>Attendez que l&apos;hôte démarre la partie...</p>
-          </div>
-        </div>
+        <WaitingScreen 
+          type="game-start"
+          playerName={playerData.name}
+          currentScore={playerData.score}
+          totalPlayers={gameState.totalPlayers}
+        />
       </div>
     )
   }
@@ -231,25 +215,12 @@ export default function PlayerInterface() {
     
     return (
       <div className="min-h-screen bg-slate-900 text-white p-6">
-        <div className="max-w-md mx-auto text-center">
-          <h1 className="text-2xl font-bold text-orange-500 mb-6">PARTIE TERMINÉE</h1>
-          
-          <div className="bg-slate-800 p-6 rounded-lg mb-6">
-            <div className="text-4xl mb-4">🎉</div>
-            <div className="text-xl font-bold mb-2">Félicitations !</div>
-            <div className="text-gray-300">Vous avez terminé #{playerRank}</div>
-          </div>
-
-          <div className="bg-slate-800 p-4 rounded mb-6">
-            <div className="text-3xl font-bold text-orange-500">{playerData.score.toLocaleString()}</div>
-            <div className="text-gray-400">Leads gagnés</div>
-          </div>
-
-          <div className="text-gray-400 text-sm">
-            <p>Merci d&apos;avoir participé !</p>
-            <p className="mt-2">Quiz éducatif par DnD Workshop</p>
-          </div>
-        </div>
+        <WaitingScreen 
+          type="game-finished"
+          playerName={playerData.name}
+          currentScore={playerData.score}
+          playerRank={playerRank}
+        />
       </div>
     )
   }
@@ -259,68 +230,35 @@ export default function PlayerInterface() {
     <div className="min-h-screen bg-slate-900 text-white p-6">
       <div className="max-w-md mx-auto">
         {/* Header */}
-        <div className="text-center mb-6">
-          <div className="text-sm text-gray-400">Question {gameState.game.current_question}/5</div>
-          <div className="text-lg font-medium">{playerData.name}</div>
-          <div className="text-xl font-bold text-orange-500">{playerData.score.toLocaleString()} leads</div>
-        </div>
+        <PlayerStats 
+          playerName={playerData.name}
+          currentScore={playerData.score}
+          questionNumber={gameState.game.current_question}
+        />
 
         {/* Question */}
-        <div className="bg-slate-800 p-6 rounded-lg mb-6">
-          <div className="text-center">
-            <div className="text-2xl font-bold text-orange-500 mb-3">
-              {currentQuestion.value.toLocaleString()} LEADS
-            </div>
-            <div className="text-lg leading-relaxed">
-              {currentQuestion.question}
-            </div>
-          </div>
-        </div>
+        <QuestionDisplay 
+          question={currentQuestion}
+          size="mobile"
+          showAnswers={false}
+        />
 
         {/* Answers */}
-        <div className="space-y-3 mb-6">
-          {currentQuestion.answers.map((answer, index) => {
-            const isSelected = selectedAnswer === index
-            const isDisabled = hasAnswered
-            
-            return (
-              <button
-                key={index}
-                onClick={() => !isDisabled && submitAnswer(index)}
-                disabled={isDisabled}
-                className={`w-full p-4 rounded-lg text-left font-medium transition-all duration-200 ${
-                  isDisabled 
-                    ? isSelected 
-                      ? 'bg-orange-500 text-white transform scale-105' 
-                      : 'bg-slate-700 text-gray-400'
-                    : 'bg-slate-800 text-white hover:bg-slate-700 active:transform active:scale-95'
-                }`}
-              >
-                <span className="font-bold text-orange-500 mr-3 text-xl">
-                  {'ABCD'[index]}
-                </span>
-                <span className="text-base">{answer}</span>
-              </button>
-            )
-          })}
-        </div>
+        <AnswerButtons 
+          answers={currentQuestion.answers}
+          onAnswerSelect={submitAnswer}
+          selectedAnswer={selectedAnswer}
+          disabled={hasAnswered}
+        />
 
         {/* Status */}
         {hasAnswered && (
-          <div className="text-center">
-            <div className="bg-slate-800 p-4 rounded-lg">
-              <div className="text-green-400 font-medium">✓ Réponse enregistrée !</div>
-              <div className="text-gray-400 text-sm mt-1">
-                En attente des autres joueurs...
-              </div>
-            </div>
-          </div>
-        )}
-
-        {!hasAnswered && (
-          <div className="text-center text-gray-400 text-sm">
-            <p>Sélectionnez votre réponse</p>
-          </div>
+          <WaitingScreen 
+            type="next-question"
+            playerName={playerData.name}
+            currentScore={playerData.score}
+            message="Réponse enregistrée ! En attente des autres joueurs..."
+          />
         )}
       </div>
     </div>
