@@ -14,7 +14,7 @@ export function GameStats({
   gameStatus 
 }: GameStatsProps) {
   return (
-    <div className="grid grid-cols-3 gap-4 mb-8">
+    <div className="grid grid-cols-3 gap-4 my-8">
       <Card className="text-center" padding="md">
         <div className="text-2xl font-bold">{totalPlayers}</div>
         <div className="text-gray-400">Players</div>

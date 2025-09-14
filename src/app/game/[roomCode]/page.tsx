@@ -9,6 +9,7 @@ import { QuestionDisplay } from '@/components/game/QuestionDisplay'
 import { Leaderboard } from '@/components/game/Leaderboard'
 import { Button } from '@/components/ui/Button'
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner'
+import { JoinInstructions } from '@/components/game/JoinInstructions'
 
 export default function GameHost() {
   const params = useParams()
@@ -59,12 +60,10 @@ export default function GameHost() {
         </div>
       </div>
 
-      {/* Game Stats */}
-      <GameStats 
-        totalPlayers={gameState.totalPlayers}
-        currentQuestion={gameState.game.current_question}
-        gameStatus={gameState.game.status}
-      />
+      {/* QR Code Info */}
+      <div className="mt-8">
+        <JoinInstructions roomCode={roomCode} compact />
+      </div>
 
       {/* Question Display */}
       {gameState.currentQuestion && (
@@ -102,10 +101,12 @@ export default function GameHost() {
         )}
       </div>
 
-      {/* QR Code Info */}
-      <div className="text-center mt-8 text-gray-400">
-        <p>Players join at: <span className="font-mono">localhost:3000/join/{roomCode}</span></p>
-      </div>
+      {/* Game Stats */}
+      <GameStats 
+        totalPlayers={gameState.totalPlayers}
+        currentQuestion={gameState.game.current_question}
+        gameStatus={gameState.game.status}
+      />
     </div>
   )
 }
