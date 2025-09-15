@@ -6,7 +6,6 @@ import { useParams } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { gameEngine } from '@/lib/game/gameEngine'
 import { questions } from '@/lib/game/questions'
-
 import { PlayerStats } from '@/components/game/PlayerStats'
 import { QuestionDisplay } from '@/components/game/QuestionDisplay'
 import { AnswerButtons } from '@/components/game/AnswerButtons'
@@ -23,36 +22,6 @@ export default function PlayerInterface() {
   const [selectedAnswer, setSelectedAnswer] = useState<number | null>(null)
   const [hasAnswered, setHasAnswered] = useState(false)
   const [loading, setLoading] = useState(true)
-
-    const checkIfAnswered = useCallback(async () => {
-    if (!gameState || !playerId) return
-
-    try {
-      const { data, error } = await supabase
-        .from('responses')
-        .select('id, answer')
-        .eq('player_id', playerId)
-        .eq('question_number', gameState.game.current_question)
-        .maybeSingle()
-
-      if (error && error.code !== 'PGRST116') {
-        console.error('Error checking if answered:', error)
-        return
-      }
-
-      if (data) {
-        // Joueur a déjà répondu
-        setHasAnswered(true)
-        setSelectedAnswer(data.answer)
-      } else {
-        // Nouvelle question ou pas encore répondu
-        setHasAnswered(false)
-        setSelectedAnswer(null)
-      }
-    } catch (error) {
-      console.error('Error checking answer status:', error)
-    }
-  }, [gameState, playerId])
 
   const fetchGameData = useCallback(async () => {
     try {
@@ -76,38 +45,97 @@ export default function PlayerInterface() {
     }
   }, [roomCode, playerId])
 
+  const checkIfAnswered = useCallback(async () => {
+    if (!gameState || !playerId) return
+
+    try {
+      const { data, error } = await supabase
+        .from('responses')
+        .select('id, answer')
+        .eq('player_id', playerId)
+        .eq('question_number', gameState.game.current_question)
+        .maybeSingle()
+
+      if (error && error.code !== 'PGRST116') {
+        console.error('Error checking if answered:', error)
+        return
+      }
+
+      if (data) {
+        setHasAnswered(true)
+        setSelectedAnswer(data.answer)
+      } else {
+        setHasAnswered(false)
+        setSelectedAnswer(null)
+      }
+    } catch (error) {
+      console.error('Error checking answer status:', error)
+    }
+  }, [gameState, playerId])
+
+  // Initial data fetch
   useEffect(() => {
     fetchGameData()
   }, [fetchGameData])
 
+  // Check answer status when game state changes
   useEffect(() => {
-    if (!gameState || !playerId) return
+    if (gameState && playerId) {
+      setTimeout(checkIfAnswered, 100)
+    }
+  }, [gameState?.game?.current_question, checkIfAnswered])
 
-    // Check answer status whenever gameState changes
-    const checkAnswer = async () => {
-      try {
-        const { data } = await supabase
-          .from('responses')
-          .select('id, answer')
-          .eq('player_id', playerId)
-          .eq('question_number', gameState.game.current_question)
-          .maybeSingle()
+  // Smart polling system
+  useEffect(() => {
+    if (!gameState) return
 
-        if (data) {
-          setHasAnswered(true)
-          setSelectedAnswer(data.answer)
+    const getPollingInterval = () => {
+      // No polling if page not visible
+      if (document.visibilityState !== 'visible') return null
+      
+      if (gameState.game.status === 'waiting' || gameState.game.status === 'finished') {
+        return 10000 // Slow for static states
+      }
+      
+      if (gameState.game.status === 'playing') {
+        if (hasAnswered) {
+          return 2000 // FAST - waiting for next question from host
         } else {
-          setHasAnswered(false)
-          setSelectedAnswer(null)
+          return 5000 // Moderate - player can still answer
         }
-      } catch (error) {
-        console.error('Error checking answer:', error)
+      }
+      
+      return 10000 // Fallback
+    }
+
+    const interval = getPollingInterval()
+    
+    if (!interval) {
+      return // No polling if page not visible
+    }
+
+    const pollInterval = setInterval(() => {
+      fetchGameData()
+    }, interval)
+
+    return () => clearInterval(pollInterval)
+  }, [gameState?.game?.status, hasAnswered, fetchGameData])
+
+  // Handle page visibility changes
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        // Immediate refresh when page becomes visible
+        fetchGameData()
       }
     }
 
-    checkAnswer()
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange)
+  }, [fetchGameData])
 
-    // Subscribe to realtime
+  // Realtime subscriptions (primary method)
+  useEffect(() => {
     const channel = supabase
       .channel(`player-${playerId}`)
       .on('postgres_changes', 
@@ -120,15 +148,14 @@ export default function PlayerInterface() {
       )
       .on('postgres_changes',
         { event: '*', schema: 'public', table: 'responses' },
-        () => checkAnswer() // Wrapper pour éviter la Promise dans le callback
+        checkIfAnswered
       )
       .subscribe()
 
-    // ✅ Cleanup function synchrone
     return () => {
-      supabase.removeChannel(channel) // Pas d'await ici
+      supabase.removeChannel(channel)
     }
-  }, [gameState, playerId, roomCode, fetchGameData])
+  }, [roomCode, playerId, fetchGameData, checkIfAnswered])
 
   const submitAnswer = async (answerIndex: number) => {
     if (hasAnswered || !gameState) return
@@ -155,17 +182,13 @@ export default function PlayerInterface() {
     } catch (error) {
       console.error('Error submitting answer:', error)
       
-      // Show error message
       if (error instanceof Error && error.message.includes('already answered')) {
-        alert('Vous avez déjà répondu à cette question !')
+        // Keep the UI showing "answered" state
       } else {
-        alert('Erreur lors de l\'envoi de la réponse')
-      }
-      
-      // Reset on error only if it's not "already answered"
-      if (!(error instanceof Error && error.message.includes('already answered'))) {
+        // Other errors - allow retry
         setSelectedAnswer(null)
         setHasAnswered(false)
+        alert('Erreur - veuillez réessayer')
       }
     }
   }
@@ -229,21 +252,20 @@ export default function PlayerInterface() {
   return (
     <div className="min-h-screen bg-slate-900 text-white p-6">
       <div className="max-w-md mx-auto">
-        {/* Header */}
         <PlayerStats 
           playerName={playerData.name}
           currentScore={playerData.score}
           questionNumber={gameState.game.current_question}
         />
 
-        {/* Question */}
-        <QuestionDisplay 
-          question={currentQuestion}
-          size="mobile"
-          showAnswers={false}
-        />
+        <div className="mb-6">
+          <QuestionDisplay 
+            question={currentQuestion}
+            size="mobile"
+            showAnswers={false}
+          />
+        </div>
 
-        {/* Answers */}
         <AnswerButtons 
           answers={currentQuestion.answers}
           onAnswerSelect={submitAnswer}
@@ -251,14 +273,21 @@ export default function PlayerInterface() {
           disabled={hasAnswered}
         />
 
-        {/* Status */}
         {hasAnswered && (
-          <WaitingScreen 
-            type="next-question"
-            playerName={playerData.name}
-            currentScore={playerData.score}
-            message="Réponse enregistrée ! En attente des autres joueurs..."
-          />
+          <div className="text-center">
+            <div className="bg-slate-800 p-4 rounded-lg">
+              <div className="text-green-400 font-medium">✓ Réponse enregistrée !</div>
+              <div className="text-gray-400 text-sm mt-1">
+                En attente des autres joueurs...
+              </div>
+            </div>
+          </div>
+        )}
+
+        {!hasAnswered && (
+          <div className="text-center text-gray-400 text-sm">
+            <p>Sélectionnez votre réponse</p>
+          </div>
         )}
       </div>
     </div>
