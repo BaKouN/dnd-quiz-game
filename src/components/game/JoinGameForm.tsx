@@ -9,14 +9,14 @@ interface JoinGameFormProps {
   isLoading?: boolean
 }
 
-export function JoinGameForm({ roomCode, onJoin, isLoading }: JoinGameFormProps) {
+export function JoinGameForm({ roomCode, onJoin, isLoading = false }: JoinGameFormProps) {
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
   const [error, setError] = useState('')
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!name.trim()) return
+    if (!name.trim() || isLoading) return
 
     setError('')
     
