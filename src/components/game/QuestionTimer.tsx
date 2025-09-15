@@ -1,27 +1,65 @@
 // components/game/QuestionTimer.tsx
 import { useState, useEffect } from 'react'
-import { Circle } from 'lucide-react'
 
 interface QuestionTimerProps {
   isActive: boolean
   duration: number // en secondes
   onTimeUp: () => void
   onReset?: () => void
+  startTime?: string
+  displayOnly?: boolean
 }
 
-export function QuestionTimer({ isActive, duration, onTimeUp, onReset }: QuestionTimerProps) {
+export function QuestionTimer({ 
+  isActive, 
+  duration, 
+  onTimeUp, 
+  onReset, 
+  startTime, 
+  displayOnly = false 
+}: QuestionTimerProps) {
   const [timeLeft, setTimeLeft] = useState(duration)
   const [isRunning, setIsRunning] = useState(false)
 
+  // Calculate time left based on database startTime (for synchronization)
+  const calculateTimeLeft = () => {
+    if (!startTime) return duration
+    
+    // Force UTC pour éviter les problèmes de timezone
+    const start = new Date(startTime + 'Z').getTime()  // Force UTC si pas déjà
+    const now = new Date().getTime()
+    const elapsed = Math.floor((now - start) / 1000)
+    const remaining = Math.max(0, duration - elapsed)
+    
+    return remaining
+  }
+
   useEffect(() => {
     if (isActive && !isRunning) {
-      setTimeLeft(duration)
-      setIsRunning(true)
+      if (startTime) {
+        // Sync with database time
+        const remaining = calculateTimeLeft()
+        setTimeLeft(remaining)
+        
+        if (remaining > 0) {
+          setIsRunning(true)
+        } else {
+          // Timer already expired
+          setTimeLeft(0)
+          if (!displayOnly) {
+            onTimeUp()
+          }
+        }
+      } else {
+        // Host mode - start fresh timer
+        setTimeLeft(duration)
+        setIsRunning(true)
+      }
     } else if (!isActive) {
       setIsRunning(false)
       setTimeLeft(duration)
     }
-  }, [isActive, duration, isRunning])
+  }, [isActive, duration, isRunning, startTime, displayOnly, onTimeUp])
 
   useEffect(() => {
     if (onReset) {
@@ -30,6 +68,24 @@ export function QuestionTimer({ isActive, duration, onTimeUp, onReset }: Questio
     }
   }, [onReset, duration])
 
+  // Sync timer with database periodically if startTime provided
+  useEffect(() => {
+    if (!startTime || !isRunning || displayOnly) return
+
+    const syncInterval = setInterval(() => {
+      const remaining = calculateTimeLeft()
+      setTimeLeft(remaining)
+      
+      if (remaining <= 0) {
+        setIsRunning(false)
+        onTimeUp()
+      }
+    }, 1000)
+
+    return () => clearInterval(syncInterval)
+  }, [startTime, isRunning, displayOnly, onTimeUp])
+
+  // Main timer countdown
   useEffect(() => {
     if (!isRunning) return
 
@@ -37,7 +93,9 @@ export function QuestionTimer({ isActive, duration, onTimeUp, onReset }: Questio
       setTimeLeft(prev => {
         if (prev <= 1) {
           setIsRunning(false)
-          onTimeUp()
+          if (!displayOnly) {
+            onTimeUp()
+          }
           return 0
         }
         return prev - 1
@@ -45,7 +103,7 @@ export function QuestionTimer({ isActive, duration, onTimeUp, onReset }: Questio
     }, 1000)
 
     return () => clearInterval(timer)
-  }, [isRunning, onTimeUp])
+  }, [isRunning, onTimeUp, displayOnly])
 
   const percentage = (timeLeft / duration) * 100
   const isUrgent = timeLeft <= 10

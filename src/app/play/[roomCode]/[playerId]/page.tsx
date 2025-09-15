@@ -11,6 +11,7 @@ import { QuestionDisplay } from '@/components/game/QuestionDisplay'
 import { AnswerButtons } from '@/components/game/AnswerButtons'
 import { WaitingScreen } from '@/components/game/WaitingScreen'
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner'
+import { QuestionTimer } from '@/components/game/QuestionTimer'
 
 export default function PlayerInterface() {
   const params = useParams()
@@ -250,6 +251,7 @@ export default function PlayerInterface() {
 
   // Game in progress - answering phase
   if (gameState.game.status === 'answering') {
+
     return (
       <div className="min-h-screen bg-slate-900 text-white p-6">
         <div className="max-w-md mx-auto">
@@ -264,6 +266,18 @@ export default function PlayerInterface() {
               question={currentQuestion}
               size="mobile"
               showAnswers={false}
+            />
+          </div>
+
+          {/* Timer for mobile players */}
+
+          <div className="mb-6 text-center">
+            <QuestionTimer 
+              isActive={gameState.game.status === 'answering'}
+              duration={45}
+              startTime={gameState.game.timer_started_at}
+              onTimeUp={() => {}} // No callback for players
+              displayOnly={true}
             />
           </div>
 

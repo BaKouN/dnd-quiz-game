@@ -33,10 +33,6 @@ export function LandingPage() {
     }
   }
 
-  const joinUrl = gameRoom 
-    ? `${window.location.origin}/join/${gameRoom.roomCode}`
-    : ''
-
   return (
     <div className="min-h-screen bg-slate-900 text-white">
       {/* Header */}
