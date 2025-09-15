@@ -1,4 +1,4 @@
-// app/game/[roomCode]/page.tsx - Version avec hooks
+// app/game/[roomCode]/page.tsx
 'use client'
 
 import { useParams } from 'next/navigation'
@@ -7,9 +7,11 @@ import { useRealtimeGame } from '@/lib/hooks/useRealtimeGame'
 import { GameStats } from '@/components/game/GameStats'
 import { QuestionDisplay } from '@/components/game/QuestionDisplay'
 import { Leaderboard } from '@/components/game/Leaderboard'
+import { QuestionTimer } from '@/components/game/QuestionTimer'
+import { JoinInstructions } from '@/components/game/JoinInstructions'
 import { Button } from '@/components/ui/Button'
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner'
-import { JoinInstructions } from '@/components/game/JoinInstructions'
+import { gameEngine } from '@/lib/game/gameEngine'
 
 export default function GameHost() {
   const params = useParams()
@@ -30,6 +32,14 @@ export default function GameHost() {
     onGameUpdate: fetchGameState,
     onPlayerUpdate: fetchGameState
   })
+
+  const handleTimeUp = async () => {
+    try {
+      await gameEngine.revealAnswer(roomCode)
+    } catch (error) {
+      console.error('Error revealing answer:', error)
+    }
+  }
 
   if (loading) {
     return (
@@ -60,9 +70,13 @@ export default function GameHost() {
         </div>
       </div>
 
-      {/* QR Code Info */}
-      <div className="mt-8">
-        <JoinInstructions roomCode={roomCode} compact />
+      {/* Game Stats */}
+      <div className="mb-8">
+        <GameStats 
+          totalPlayers={gameState.totalPlayers}
+          currentQuestion={gameState.game.current_question}
+          gameStatus={gameState.game.status}
+        />
       </div>
 
       {/* Question Display */}
@@ -72,6 +86,29 @@ export default function GameHost() {
             question={gameState.currentQuestion}
             size="desktop"
           />
+          
+          {/* Timer Section */}
+          {gameState.game.status === 'answering' && (
+            <div className="mt-6 text-center">
+              <QuestionTimer 
+                isActive={gameState.game.status === 'answering'}
+                duration={45}
+                onTimeUp={handleTimeUp}
+              />
+            </div>
+          )}
+          
+          {/* Reveal Section */}
+          {gameState.game.status === 'revealing' && (
+            <div className="mt-6 p-6 bg-green-900/20 border border-green-500 rounded-lg text-center">
+              <div className="text-2xl font-bold text-green-400 mb-2">
+                Bonne réponse : {gameState.currentQuestion.answers[gameState.currentQuestion.correct]}
+              </div>
+              <div className="text-gray-300">
+                {gameState.currentQuestion.explanation}
+              </div>
+            </div>
+          )}
         </div>
       )}
 
@@ -88,25 +125,23 @@ export default function GameHost() {
           </Button>
         )}
         
-        {gameState.game.status === 'playing' && (
+        {gameState.game.status === 'revealing' && (
           <Button onClick={nextQuestion} variant="primary" size="lg">
-            Next Question
+            Question Suivante
           </Button>
         )}
         
         {gameState.game.status === 'finished' && (
           <div className="text-2xl text-green-500 font-bold">
-            🎉 Game Finished! 🎉
+            🎉 Jeu Terminé ! 🎉
           </div>
         )}
       </div>
 
-      {/* Game Stats */}
-      <GameStats 
-        totalPlayers={gameState.totalPlayers}
-        currentQuestion={gameState.game.current_question}
-        gameStatus={gameState.game.status}
-      />
+      {/* QR CODE - Always visible */}
+      <div className="mt-8">
+        <JoinInstructions roomCode={roomCode} compact />
+      </div>
     </div>
   )
 }

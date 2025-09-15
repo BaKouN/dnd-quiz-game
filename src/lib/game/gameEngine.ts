@@ -108,7 +108,26 @@ export class GameEngine {
     }
   }
 
-  // Passer à la question suivante
+  // Commencer le jeu ET lancer le timer de la première question
+  async startGame(roomCode: string): Promise<void> {
+    await supabase
+      .from('games')
+      .update({ 
+        status: 'answering',
+        timer_started_at: new Date().toISOString()
+      })
+      .eq('room_code', roomCode)
+  }
+
+  // Révéler la réponse (appelé automatiquement par le timer)
+  async revealAnswer(roomCode: string): Promise<void> {
+    await supabase
+      .from('games')
+      .update({ status: 'revealing' })
+      .eq('room_code', roomCode)
+  }
+
+  // Passer à la question suivante ET lancer le timer
   async nextQuestion(roomCode: string): Promise<boolean> {
     const { data: game } = await supabase
       .from('games')
@@ -129,15 +148,20 @@ export class GameEngine {
       return false
     }
 
-    // Sinon, passer à la question suivante
+    // Sinon, passer à la question suivante ET lancer le timer
     await supabase
       .from('games')
-      .update({ current_question: nextQuestionNum })
+      .update({ 
+        current_question: nextQuestionNum,
+        status: 'answering',
+        timer_started_at: new Date().toISOString()
+      })
       .eq('room_code', roomCode)
 
     return true
   }
 
+  // Soumettre une réponse (avec anti-triche)
   async submitAnswer(playerId: string, questionNumber: number, answerIndex: number): Promise<{
     isCorrect: boolean;
     pointsEarned: number;
@@ -180,8 +204,7 @@ export class GameEngine {
     }
 
     try {
-      // 4. Transaction : Enregistrer la réponse ET mettre à jour le score
-      // D'abord enregistrer la réponse (avec contrainte UNIQUE)
+      // 4. Enregistrer la réponse (avec contrainte UNIQUE)
       const { error: responseError } = await supabase
         .from('responses')
         .insert({
@@ -209,8 +232,6 @@ export class GameEngine {
           .eq('id', playerId)
 
         if (updateError) {
-          // En cas d'erreur de score, on pourrait rollback la response
-          // Mais pour simplifier, on laisse la response enregistrée
           console.error('Error updating score:', updateError)
         }
       }
@@ -227,14 +248,6 @@ export class GameEngine {
       }
       throw new Error('Unknown error occurred')
     }
-  }
-
-  // Commencer le jeu
-  async startGame(roomCode: string): Promise<void> {
-    await supabase
-      .from('games')
-      .update({ status: 'playing' })
-      .eq('room_code', roomCode)
   }
 
   // Réinitialiser pour une nouvelle partie
@@ -262,7 +275,6 @@ export class GameEngine {
       })
       .eq('room_code', roomCode)
   }
-
 }
 
 // Instance globale

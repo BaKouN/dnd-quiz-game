@@ -85,7 +85,7 @@ export default function PlayerInterface() {
     }
   }, [gameState?.game?.current_question, checkIfAnswered])
 
-  // Smart polling system
+  // Smart polling system based on game status
   useEffect(() => {
     if (!gameState) return
 
@@ -97,12 +97,12 @@ export default function PlayerInterface() {
         return 10000 // Slow for static states
       }
       
-      if (gameState.game.status === 'playing') {
-        if (hasAnswered) {
-          return 2000 // FAST - waiting for next question from host
-        } else {
-          return 5000 // Moderate - player can still answer
-        }
+      if (gameState.game.status === 'answering') {
+        return hasAnswered ? 2000 : 5000 // Fast if answered, moderate if still answering
+      }
+      
+      if (gameState.game.status === 'revealing') {
+        return 2000 // Fast - waiting for next question
       }
       
       return 10000 // Fallback
@@ -248,47 +248,126 @@ export default function PlayerInterface() {
     )
   }
 
-  // Game in progress
-  return (
-    <div className="min-h-screen bg-slate-900 text-white p-6">
-      <div className="max-w-md mx-auto">
-        <PlayerStats 
-          playerName={playerData.name}
-          currentScore={playerData.score}
-          questionNumber={gameState.game.current_question}
-        />
-
-        <div className="mb-6">
-          <QuestionDisplay 
-            question={currentQuestion}
-            size="mobile"
-            showAnswers={false}
+  // Game in progress - answering phase
+  if (gameState.game.status === 'answering') {
+    return (
+      <div className="min-h-screen bg-slate-900 text-white p-6">
+        <div className="max-w-md mx-auto">
+          <PlayerStats 
+            playerName={playerData.name}
+            currentScore={playerData.score}
+            questionNumber={gameState.game.current_question}
           />
-        </div>
 
-        <AnswerButtons 
-          answers={currentQuestion.answers}
-          onAnswerSelect={submitAnswer}
-          selectedAnswer={selectedAnswer}
-          disabled={hasAnswered}
-        />
+          <div className="mb-6">
+            <QuestionDisplay 
+              question={currentQuestion}
+              size="mobile"
+              showAnswers={false}
+            />
+          </div>
 
-        {hasAnswered && (
-          <div className="text-center">
-            <div className="bg-slate-800 p-4 rounded-lg">
-              <div className="text-green-400 font-medium">✓ Réponse enregistrée !</div>
-              <div className="text-gray-400 text-sm mt-1">
-                En attente des autres joueurs...
+          <AnswerButtons 
+            answers={currentQuestion.answers}
+            onAnswerSelect={submitAnswer}
+            selectedAnswer={selectedAnswer}
+            disabled={hasAnswered}
+          />
+
+          {hasAnswered && (
+            <div className="text-center">
+              <div className="bg-slate-800 p-4 rounded-lg">
+                <div className="text-green-400 font-medium">✓ Réponse enregistrée !</div>
+                <div className="text-gray-400 text-sm mt-1">
+                  En attente des autres joueurs...
+                </div>
               </div>
             </div>
-          </div>
-        )}
+          )}
 
-        {!hasAnswered && (
-          <div className="text-center text-gray-400 text-sm">
-            <p>Sélectionnez votre réponse</p>
+          {!hasAnswered && (
+            <div className="text-center text-gray-400 text-sm">
+              <p>Sélectionnez votre réponse</p>
+            </div>
+          )}
+        </div>
+      </div>
+    )
+  }
+
+  // Game in progress - revealing phase
+  if (gameState.game.status === 'revealing') {
+    const isCorrect = selectedAnswer !== null && selectedAnswer === currentQuestion.correct
+    
+    return (
+      <div className="min-h-screen bg-slate-900 text-white p-6">
+        <div className="max-w-md mx-auto">
+          <PlayerStats 
+            playerName={playerData.name}
+            currentScore={playerData.score}
+            questionNumber={gameState.game.current_question}
+          />
+
+          <div className="mb-6">
+            <QuestionDisplay 
+              question={currentQuestion}
+              size="mobile"
+              showAnswers={false}
+            />
           </div>
-        )}
+
+          {/* Show player's answer and result */}
+          <div className="mb-6">
+            <div className={`p-4 rounded-lg text-center ${
+              isCorrect ? 'bg-green-900/20 border border-green-500' : 'bg-red-900/20 border border-red-500'
+            }`}>
+              {hasAnswered && selectedAnswer !== null ? (
+                <>
+                  <div className="text-lg font-bold mb-2">
+                    Votre réponse : {currentQuestion.answers[selectedAnswer]}
+                  </div>
+                  <div className={`text-2xl font-bold ${isCorrect ? 'text-green-400' : 'text-red-400'}`}>
+                    {isCorrect ? '✓ Correct !' : '✗ Incorrect'}
+                  </div>
+                  {isCorrect && (
+                    <div className="text-green-300 mt-2">
+                      +{currentQuestion.value.toLocaleString()} leads
+                    </div>
+                  )}
+                </>
+              ) : (
+                <div className="text-gray-400">
+                  Vous n&apos;avez pas répondu à temps
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Show correct answer */}
+          <div className="mb-6 p-4 bg-slate-800 rounded-lg text-center">
+            <div className="text-sm text-gray-400 mb-2">Bonne réponse :</div>
+            <div className="text-lg font-bold text-orange-500 mb-2">
+              {currentQuestion.answers[currentQuestion.correct]}
+            </div>
+            <div className="text-sm text-gray-300">
+              {currentQuestion.explanation}
+            </div>
+          </div>
+
+          <div className="text-center text-gray-400 text-sm">
+            <p>En attente de la question suivante...</p>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  // Fallback
+  return (
+    <div className="min-h-screen bg-slate-900 text-white flex items-center justify-center">
+      <div className="text-center">
+        <div className="text-xl">État du jeu inconnu</div>
+        <div className="text-sm text-gray-400 mt-2">Status: {gameState.game.status}</div>
       </div>
     </div>
   )
