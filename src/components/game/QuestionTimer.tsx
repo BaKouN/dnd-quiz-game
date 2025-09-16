@@ -1,4 +1,6 @@
-// components/game/QuestionTimer.tsx
+// src/components/game/QuestionTimer.tsx - Version corrigée
+'use client'
+
 import { useState, useEffect } from 'react'
 
 interface QuestionTimerProps {
@@ -25,41 +27,67 @@ export function QuestionTimer({
   const calculateTimeLeft = () => {
     if (!startTime) return duration
     
-    // Force UTC pour éviter les problèmes de timezone
-    const start = new Date(startTime + 'Z').getTime()  // Force UTC si pas déjà
-    const now = new Date().getTime()
-    const elapsed = Math.floor((now - start) / 1000)
-    const remaining = Math.max(0, duration - elapsed)
-    
-    return remaining
+    try {
+      // IMPORTANT: Tout en UTC pour éviter les problèmes de timezone
+      const startUTC = new Date(startTime).getTime() // Supabase retourne déjà en UTC
+      const nowUTC = new Date().getTime() // getTime() retourne toujours UTC
+      const elapsed = Math.floor((nowUTC - startUTC) / 1000)
+      const remaining = Math.max(0, duration - elapsed)
+      
+      console.log('⏱️ Timer calc (UTC):', {
+        startTime,
+        startUTC: new Date(startUTC).toISOString(),
+        nowUTC: new Date(nowUTC).toISOString(),
+        elapsed,
+        duration,
+        remaining
+      })
+      
+      return remaining
+    } catch (error) {
+      console.error('Timer parsing error:', error)
+      return duration
+    }
   }
 
+  // NOUVEAU: Effet qui se déclenche quand startTime change (mise à jour du timer)
   useEffect(() => {
-    if (isActive && !isRunning) {
-      if (startTime) {
-        // Sync with database time
-        const remaining = calculateTimeLeft()
+    if (startTime && isActive) {
+      const remaining = calculateTimeLeft()
+      console.log('🔄 Timer resync triggered:', { startTime, remaining, duration, isActive, currentTimeLeft: timeLeft })
+      
+      // Seulement mettre à jour si la différence est significative (>2 secondes)
+      const timeDiff = Math.abs(remaining - timeLeft)
+      if (timeDiff > 2 && remaining >= 0 && remaining <= duration) {
+        console.log('⚡ Applying timer sync - significant change detected:', { timeDiff, newTime: remaining })
         setTimeLeft(remaining)
         
         if (remaining > 0) {
           setIsRunning(true)
         } else {
-          // Timer already expired
           setTimeLeft(0)
+          setIsRunning(false)
           if (!displayOnly) {
             onTimeUp()
           }
         }
-      } else {
-        // Host mode - start fresh timer
-        setTimeLeft(duration)
-        setIsRunning(true)
       }
+    }
+  }, [startTime, isActive, duration, displayOnly, onTimeUp, timeLeft])
+
+  useEffect(() => {
+    if (isActive && !startTime) {
+      // Host mode - start fresh timer (pas de startTime de la DB)
+      console.log('🎬 Starting fresh timer (host mode)')
+      setTimeLeft(duration)
+      setIsRunning(true)
     } else if (!isActive) {
+      console.log('⏹️ Timer stopped')
       setIsRunning(false)
       setTimeLeft(duration)
     }
-  }, [isActive, duration, isRunning, startTime, displayOnly, onTimeUp])
+    // Si on a startTime, on laisse l'autre useEffect gérer
+  }, [isActive, duration, startTime])
 
   useEffect(() => {
     if (onReset) {
@@ -68,9 +96,9 @@ export function QuestionTimer({
     }
   }, [onReset, duration])
 
-  // Sync timer with database periodically if startTime provided
+  // Sync timer with database périodiquement - AUGMENTÉ LA FRÉQUENCE
   useEffect(() => {
-    if (!startTime || !isRunning || displayOnly) return
+    if (!startTime || !isRunning) return
 
     const syncInterval = setInterval(() => {
       const remaining = calculateTimeLeft()
@@ -78,9 +106,11 @@ export function QuestionTimer({
       
       if (remaining <= 0) {
         setIsRunning(false)
-        onTimeUp()
+        if (!displayOnly) {
+          onTimeUp()
+        }
       }
-    }, 1000)
+    }, 500) // Réduit de 1000ms à 500ms pour plus de réactivité
 
     return () => clearInterval(syncInterval)
   }, [startTime, isRunning, displayOnly, onTimeUp])
@@ -137,7 +167,7 @@ export function QuestionTimer({
             fill="none"
             strokeDasharray={`${2 * Math.PI * 40}`}
             strokeDashoffset={`${2 * Math.PI * 40 * (1 - percentage / 100)}`}
-            className={`transition-all duration-1000 ${
+            className={`transition-all duration-500 ${
               isUrgent ? 'text-red-500' : 'text-orange-500'
             }`}
             strokeLinecap="round"

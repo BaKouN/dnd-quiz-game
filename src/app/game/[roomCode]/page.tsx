@@ -1,4 +1,4 @@
-// app/game/[roomCode]/page.tsx
+// src/app/game/[roomCode]/page.tsx
 'use client'
 
 import { useParams } from 'next/navigation'
@@ -7,7 +7,8 @@ import { useRealtimeGame } from '@/lib/hooks/useRealtimeGame'
 import { GameStats } from '@/components/game/GameStats'
 import { QuestionDisplay } from '@/components/game/QuestionDisplay'
 import { Leaderboard } from '@/components/game/Leaderboard'
-import { QuestionTimer } from '@/components/game/QuestionTimer'
+import { SimpleTimer } from '@/components/game/SimpleTimer'
+import { SimpleTimerControls } from '@/components/game/SimpleTimerControls'
 import { JoinInstructions } from '@/components/game/JoinInstructions'
 import { Button } from '@/components/ui/Button'
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner'
@@ -34,6 +35,7 @@ export default function GameHost() {
   })
 
   const handleTimeUp = async () => {
+    console.log('⏰ Host timer expired - revealing answers')
     try {
       await gameEngine.revealAnswer(roomCode)
     } catch (error) {
@@ -61,7 +63,13 @@ export default function GameHost() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-900 text-white p-8">
+    <div className="min-h-screen bg-slate-900 text-white p-8 relative">
+      {/* Contrôles Timer - Position fixe en haut à droite */}
+      <SimpleTimerControls 
+        roomCode={roomCode}
+        gameStatus={gameState.game.status}
+      />
+
       {/* Header */}
       <div className="text-center mb-8">
         <h1 className="text-4xl font-bold text-orange-500">LEAD MILLIONAIRE</h1>
@@ -87,12 +95,11 @@ export default function GameHost() {
             size="desktop"
           />
           
-          {/* Timer Section */}
+          {/* Timer Section - SIMPLE */}
           {gameState.game.status === 'answering' && (
             <div className="mt-6 text-center">
-              <QuestionTimer 
+              <SimpleTimer 
                 isActive={gameState.game.status === 'answering'}
-                duration={45}
                 onTimeUp={handleTimeUp}
               />
             </div>

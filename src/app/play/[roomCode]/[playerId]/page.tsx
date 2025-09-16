@@ -63,8 +63,16 @@ export default function PlayerInterface() {
       }
 
       if (data) {
-        setHasAnswered(true)
-        setSelectedAnswer(data.answer)
+        if (data.answer === -1) {
+          // TIMEOUT - Player was too slow
+          setHasAnswered(true)
+          setSelectedAnswer(-1) // -1 = timeout
+          console.log('💔 Player was too slow!')
+        } else {
+          // Normal answer
+          setHasAnswered(true)
+          setSelectedAnswer(data.answer)
+        }
       } else {
         setHasAnswered(false)
         setSelectedAnswer(null)
@@ -185,6 +193,10 @@ export default function PlayerInterface() {
       
       if (error instanceof Error && error.message.includes('already answered')) {
         // Keep the UI showing "answered" state
+      } else if (error instanceof Error && error.message.includes('Time expired')) {
+        // Timeout error - show timeout state
+        setSelectedAnswer(-1)
+        setHasAnswered(true)
       } else {
         // Other errors - allow retry
         setSelectedAnswer(null)
@@ -249,9 +261,41 @@ export default function PlayerInterface() {
     )
   }
 
+  // TIMEOUT STATE - Player was too slow
+  if (gameState.game.status === 'answering' && hasAnswered && selectedAnswer === -1) {
+    return (
+      <div className="min-h-screen bg-slate-900 text-white p-6">
+        <div className="max-w-md mx-auto">
+          <PlayerStats 
+            playerName={playerData.name}
+            currentScore={playerData.score}
+            questionNumber={gameState.game.current_question}
+          />
+
+          <div className="text-center">
+            <div className="bg-red-900/20 border border-red-500 p-6 rounded-lg mb-6">
+              <div className="text-4xl mb-4">⏰</div>
+              <div className="text-xl font-bold text-red-400 mb-2">
+                Trop tard !
+              </div>
+              <div className="text-gray-300">
+                Vous n&apos;avez pas répondu à temps...
+              </div>
+            </div>
+
+            <div className="bg-slate-800 p-4 rounded-lg">
+              <div className="text-gray-400 text-sm">
+                En attente de la révélation de la réponse
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
   // Game in progress - answering phase
   if (gameState.game.status === 'answering') {
-
     return (
       <div className="min-h-screen bg-slate-900 text-white p-6">
         <div className="max-w-md mx-auto">
@@ -269,17 +313,11 @@ export default function PlayerInterface() {
             />
           </div>
 
-          {/* Timer for mobile players */}
-
-          <div className="mb-6 text-center">
-            <QuestionTimer 
-              isActive={gameState.game.status === 'answering'}
-              duration={45}
-              startTime={gameState.game.timer_started_at}
-              onTimeUp={() => {}} // No callback for players
-              displayOnly={true}
-            />
-          </div>
+          {gameState.game.status === 'answering' && (
+            <div className="text-center my-4 text-orange-500 animate-pulse">
+              ⏱ Réflexion en cours...
+            </div>
+          )}
 
           <AnswerButtons 
             answers={currentQuestion.answers}
@@ -288,7 +326,7 @@ export default function PlayerInterface() {
             disabled={hasAnswered}
           />
 
-          {hasAnswered && (
+          {hasAnswered && selectedAnswer !== -1 && (
             <div className="text-center">
               <div className="bg-slate-800 p-4 rounded-lg">
                 <div className="text-green-400 font-medium">✓ Réponse enregistrée !</div>
@@ -301,7 +339,7 @@ export default function PlayerInterface() {
 
           {!hasAnswered && (
             <div className="text-center text-gray-400 text-sm">
-              <p>Sélectionnez votre réponse</p>
+              <p>Sélectionnez votre réponse rapidement !</p>
             </div>
           )}
         </div>
@@ -310,71 +348,71 @@ export default function PlayerInterface() {
   }
 
   // Game in progress - revealing phase
-  if (gameState.game.status === 'revealing') {
-    const isCorrect = selectedAnswer !== null && selectedAnswer === currentQuestion.correct
-    
-    return (
-      <div className="min-h-screen bg-slate-900 text-white p-6">
-        <div className="max-w-md mx-auto">
-          <PlayerStats 
-            playerName={playerData.name}
-            currentScore={playerData.score}
-            questionNumber={gameState.game.current_question}
+if (gameState.game.status === 'revealing') {
+  const isCorrect = selectedAnswer !== null && selectedAnswer === currentQuestion.correct
+  
+  return (
+    <div className="min-h-screen bg-slate-900 text-white p-6">
+      <div className="max-w-md mx-auto">
+        <PlayerStats 
+          playerName={playerData.name}
+          currentScore={playerData.score}
+          questionNumber={gameState.game.current_question}
+        />
+
+        <div className="mb-6">
+          <QuestionDisplay 
+            question={currentQuestion}
+            size="mobile"
+            showAnswers={false}
           />
+        </div>
 
-          <div className="mb-6">
-            <QuestionDisplay 
-              question={currentQuestion}
-              size="mobile"
-              showAnswers={false}
-            />
-          </div>
-
-          {/* Show player's answer and result */}
-          <div className="mb-6">
-            <div className={`p-4 rounded-lg text-center ${
-              isCorrect ? 'bg-green-900/20 border border-green-500' : 'bg-red-900/20 border border-red-500'
-            }`}>
-              {hasAnswered && selectedAnswer !== null ? (
-                <>
-                  <div className="text-lg font-bold mb-2">
-                    Votre réponse : {currentQuestion.answers[selectedAnswer]}
-                  </div>
-                  <div className={`text-2xl font-bold ${isCorrect ? 'text-green-400' : 'text-red-400'}`}>
-                    {isCorrect ? '✓ Correct !' : '✗ Incorrect'}
-                  </div>
-                  {isCorrect && (
-                    <div className="text-green-300 mt-2">
-                      +{currentQuestion.value.toLocaleString()} leads
-                    </div>
-                  )}
-                </>
-              ) : (
-                <div className="text-gray-400">
-                  Vous n&apos;avez pas répondu à temps
+        {/* Show player's answer and result */}
+        <div className="mb-6">
+          <div className={`p-4 rounded-lg text-center ${
+            isCorrect ? 'bg-green-900/20 border border-green-500' : 'bg-red-900/20 border border-red-500'
+          }`}>
+            {hasAnswered && selectedAnswer !== null ? (
+              <>
+                <div className="text-lg font-bold mb-2">
+                  Votre réponse : {currentQuestion.answers[selectedAnswer]}
                 </div>
-              )}
-            </div>
-          </div>
-
-          {/* Show correct answer */}
-          <div className="mb-6 p-4 bg-slate-800 rounded-lg text-center">
-            <div className="text-sm text-gray-400 mb-2">Bonne réponse :</div>
-            <div className="text-lg font-bold text-orange-500 mb-2">
-              {currentQuestion.answers[currentQuestion.correct]}
-            </div>
-            <div className="text-sm text-gray-300">
-              {currentQuestion.explanation}
-            </div>
-          </div>
-
-          <div className="text-center text-gray-400 text-sm">
-            <p>En attente de la question suivante...</p>
+                <div className={`text-2xl font-bold ${isCorrect ? 'text-green-400' : 'text-red-400'}`}>
+                  {isCorrect ? '✓ Correct !' : '✗ Incorrect'}
+                </div>
+                {isCorrect && (
+                  <div className="text-green-300 mt-2">
+                    +{currentQuestion.value.toLocaleString()} leads
+                  </div>
+                )}
+              </>
+            ) : (
+              <div className="text-gray-400">
+                Vous n&apos;avez pas répondu à temps
+              </div>
+            )}
           </div>
         </div>
+
+        {/* Show correct answer */}
+        <div className="mb-6 p-4 bg-slate-800 rounded-lg text-center">
+          <div className="text-sm text-gray-400 mb-2">Bonne réponse :</div>
+          <div className="text-lg font-bold text-green-400 mb-2">
+            {currentQuestion.answers[currentQuestion.correct]}
+          </div>
+          <div className="text-sm text-gray-300">
+            {currentQuestion.explanation}
+          </div>
+        </div>
+
+        <div className="text-center text-gray-400 text-sm">
+          <p>En attente de la question suivante...</p>
+        </div>
       </div>
-    )
-  }
+    </div>
+  )
+}
 
   // Fallback
   return (

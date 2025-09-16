@@ -108,18 +108,151 @@ export class GameEngine {
     }
   }
 
-  // Commencer le jeu ET lancer le timer de la première question
+  // Commencer le jeu
   async startGame(roomCode: string): Promise<void> {
     await supabase
       .from('games')
       .update({ 
-        status: 'answering',
-        timer_started_at: new Date().toISOString()
+        status: 'answering'
       })
       .eq('room_code', roomCode)
   }
 
-  // Révéler la réponse (appelé automatiquement par le timer)
+  // Forcer l'avancement du timer (réduire à 5 secondes)
+  async forceTimerAdvance(roomCode: string): Promise<void> {
+    console.log('🎯 Forcing timer advance to 5 seconds')
+    
+    // IMPORTANT: Utiliser UTC pour éviter les problèmes de timezone
+    // Si on veut 5 secondes restantes sur un timer de 45 secondes total,
+    // on doit faire comme si le timer avait démarré il y a (45-5) = 40 secondes EN UTC
+    const nowUTC = new Date().getTime() // déjà en UTC (millisecondes depuis epoch)
+    const newStartTimeUTC = new Date(nowUTC - (45 - 5) * 1000).toISOString()
+    
+    console.log('🕐 Current UTC:', new Date().toISOString())
+    console.log('🕐 New timer_started_at (UTC):', newStartTimeUTC)
+    
+    const { error } = await supabase
+      .from('games')
+      .update({ 
+        timer_started_at: newStartTimeUTC
+      })
+      .eq('room_code', roomCode)
+      
+    if (error) {
+      console.error('Error updating timer:', error)
+    } else {
+      console.log('✅ Timer updated successfully')
+    }
+  }
+
+  // Vérifier combien de joueurs ont répondu à la question courante
+  async getAnswerStats(roomCode: string): Promise<{
+    totalPlayers: number;
+    playersAnswered: number;
+    allAnswered: boolean;
+  }> {
+    // 1. Récupérer le jeu et la question courante
+    const { data: game } = await supabase
+      .from('games')
+      .select('id, current_question')
+      .eq('room_code', roomCode)
+      .single()
+
+    if (!game) {
+      return { totalPlayers: 0, playersAnswered: 0, allAnswered: false }
+    }
+
+    // 2. Compter le total de joueurs
+    const { count: totalPlayers } = await supabase
+      .from('players')
+      .select('*', { count: 'exact', head: true })
+      .eq('game_id', game.id)
+
+    // 3. Compter les joueurs qui ont répondu à cette question
+    const { count: playersAnswered } = await supabase
+      .from('responses')
+      .select('*', { count: 'exact', head: true })
+      .eq('game_id', game.id)
+      .eq('question_number', game.current_question)
+
+    return {
+      totalPlayers: totalPlayers || 0,
+      playersAnswered: playersAnswered || 0,
+      allAnswered: (playersAnswered || 0) >= (totalPlayers || 0) && totalPlayers! > 0
+    }
+  }
+
+  // NOUVELLE MÉTHODE: Timeout automatique des non-répondants (appelée par le host timer)
+  async timeoutNonRespondents(roomCode: string): Promise<void> {
+    try {
+      console.log('⏰ Timeout triggered by host for room:', roomCode)
+
+      // 1. Récupérer le jeu
+      const { data: game } = await supabase
+        .from('games')
+        .select('id, current_question')
+        .eq('room_code', roomCode)
+        .single()
+
+      if (!game) throw new Error('Game not found')
+
+      // 2. Récupérer tous les players
+      const { data: players } = await supabase
+        .from('players')
+        .select('id, name')
+        .eq('game_id', game.id)
+
+      if (!players || players.length === 0) return
+
+      // 3. Voir qui a déjà répondu
+      const { data: responses } = await supabase
+        .from('responses')
+        .select('player_id')
+        .eq('question_number', game.current_question)
+        .eq('game_id', game.id)
+
+      const answeredPlayerIds = new Set(responses?.map(r => r.player_id) || [])
+
+      // 4. Identifier les retardataires
+      const latecomers = players.filter(player => !answeredPlayerIds.has(player.id))
+
+      console.log(`💔 ${latecomers.length} players were too slow`)
+
+      // 5. Créer des réponses "timeout" pour eux
+      if (latecomers.length > 0) {
+        const timeoutResponses = latecomers.map(player => ({
+          game_id: game.id,
+          player_id: player.id,
+          question_number: game.current_question,
+          answer: -1, // -1 = TIMEOUT
+          is_correct: false
+        }))
+
+        await supabase
+          .from('responses')
+          .insert(timeoutResponses)
+      }
+
+      // 6. Passer le jeu en mode "revealing"
+      await supabase
+        .from('games')
+        .update({ status: 'revealing' })
+        .eq('room_code', roomCode)
+
+      console.log('✅ Timeout completed, game now in revealing mode')
+
+    } catch (error) {
+      console.error('❌ Error during timeout:', error)
+      
+      // Au minimum, changer le statut pour pas bloquer
+      await supabase
+        .from('games')
+        .update({ status: 'revealing' })
+        .eq('room_code', roomCode)
+    }
+  }
+
+  // Révéler la réponse (legacy - remplacé par timeoutNonRespondents)
   async revealAnswer(roomCode: string): Promise<void> {
     await supabase
       .from('games')
@@ -127,7 +260,7 @@ export class GameEngine {
       .eq('room_code', roomCode)
   }
 
-  // Passer à la question suivante ET lancer le timer
+  // Passer à la question suivante
   async nextQuestion(roomCode: string): Promise<boolean> {
     const { data: game } = await supabase
       .from('games')
@@ -148,29 +281,28 @@ export class GameEngine {
       return false
     }
 
-    // Sinon, passer à la question suivante ET lancer le timer
+    // Sinon, passer à la question suivante
     await supabase
       .from('games')
       .update({ 
         current_question: nextQuestionNum,
-        status: 'answering',
-        timer_started_at: new Date().toISOString()
+        status: 'answering'
       })
       .eq('room_code', roomCode)
 
     return true
   }
 
-  // Soumettre une réponse (avec anti-triche)
+  // Soumettre une réponse (avec protection contre timeout)
   async submitAnswer(playerId: string, questionNumber: number, answerIndex: number): Promise<{
     isCorrect: boolean;
     pointsEarned: number;
     correctAnswer: number;
   }> {
-    // 1. Vérifier si le joueur a déjà répondu à cette question
+    // 1. Vérifier si le joueur a déjà répondu (y compris timeout)
     const { data: existingResponse, error: checkError } = await supabase
       .from('responses')
-      .select('id')
+      .select('id, answer')
       .eq('player_id', playerId)
       .eq('question_number', questionNumber)
       .maybeSingle()
@@ -180,7 +312,11 @@ export class GameEngine {
     }
 
     if (existingResponse) {
-      throw new Error('You have already answered this question')
+      if (existingResponse.answer === -1) {
+        throw new Error('Time expired - you can no longer answer this question')
+      } else {
+        throw new Error('You have already answered this question')
+      }
     }
 
     // 2. Récupérer la question
@@ -204,7 +340,7 @@ export class GameEngine {
     }
 
     try {
-      // 4. Enregistrer la réponse (avec contrainte UNIQUE)
+      // 4. Enregistrer la réponse
       const { error: responseError } = await supabase
         .from('responses')
         .insert({
@@ -216,7 +352,6 @@ export class GameEngine {
         })
 
       if (responseError) {
-        // Si erreur de contrainte UNIQUE = déjà répondu
         if (responseError.code === '23505') {
           throw new Error('You have already answered this question')
         }
