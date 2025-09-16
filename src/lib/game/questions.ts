@@ -42,9 +42,9 @@ export const questionSetA: Question[] = [
     id: 103,
     question: "Taux de conversion moyen d'un site e-commerce ?",
     answers: ["1,2%", "2,3%", "5,8%", "8,1%"],
-    correct: 1, // 3,3%
+    correct: 1, // 2,3%
     value: 1,
-    explanation: "3,3% en France ! Mais les expériences interactives peuvent faire 10x mieux...",
+    explanation: "2,3% en France ! Mais les expériences interactives peuvent faire 10x mieux...",
     source: "Smart Insights E-commerce 2025",
     sourceUrl: "https://www.smartinsights.com/ecommerce/ecommerce-analytics/ecommerce-conversion-rates/"
   },
