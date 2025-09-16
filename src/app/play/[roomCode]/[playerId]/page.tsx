@@ -11,7 +11,6 @@ import { QuestionDisplay } from '@/components/game/QuestionDisplay'
 import { AnswerButtons } from '@/components/game/AnswerButtons'
 import { WaitingScreen } from '@/components/game/WaitingScreen'
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner'
-import { QuestionTimer } from '@/components/game/QuestionTimer'
 
 export default function PlayerInterface() {
   const params = useParams()
@@ -103,18 +102,18 @@ export default function PlayerInterface() {
       if (document.visibilityState !== 'visible') return null
       
       if (gameState.game.status === 'waiting' || gameState.game.status === 'finished') {
-        return 10000 // Slow for static states
+        return 30000 // Slow for static states
       }
       
       if (gameState.game.status === 'answering') {
-        return hasAnswered ? 2000 : 5000 // Fast if answered, moderate if still answering
+        return hasAnswered ? 5000 : 10000 // Fast if answered, moderate if still answering
       }
       
       if (gameState.game.status === 'revealing') {
         return 2000 // Fast - waiting for next question
       }
       
-      return 10000 // Fallback
+      return 20000 // Fallback
     }
 
     const interval = getPollingInterval()

@@ -1,4 +1,4 @@
-// lib/game/gameEngine.ts
+// lib/game/gameEngine.ts - VERSION NETTOYÉE
 import { supabase } from '@/lib/supabase'
 import { questions } from './questions'
 import type { Game, Player } from '@/types/game'
@@ -112,37 +112,8 @@ export class GameEngine {
   async startGame(roomCode: string): Promise<void> {
     await supabase
       .from('games')
-      .update({ 
-        status: 'answering'
-      })
+      .update({ status: 'answering' })
       .eq('room_code', roomCode)
-  }
-
-  // Forcer l'avancement du timer (réduire à 5 secondes)
-  async forceTimerAdvance(roomCode: string): Promise<void> {
-    console.log('🎯 Forcing timer advance to 5 seconds')
-    
-    // IMPORTANT: Utiliser UTC pour éviter les problèmes de timezone
-    // Si on veut 5 secondes restantes sur un timer de 45 secondes total,
-    // on doit faire comme si le timer avait démarré il y a (45-5) = 40 secondes EN UTC
-    const nowUTC = new Date().getTime() // déjà en UTC (millisecondes depuis epoch)
-    const newStartTimeUTC = new Date(nowUTC - (45 - 5) * 1000).toISOString()
-    
-    console.log('🕐 Current UTC:', new Date().toISOString())
-    console.log('🕐 New timer_started_at (UTC):', newStartTimeUTC)
-    
-    const { error } = await supabase
-      .from('games')
-      .update({ 
-        timer_started_at: newStartTimeUTC
-      })
-      .eq('room_code', roomCode)
-      
-    if (error) {
-      console.error('Error updating timer:', error)
-    } else {
-      console.log('✅ Timer updated successfully')
-    }
   }
 
   // Vérifier combien de joueurs ont répondu à la question courante
@@ -182,12 +153,11 @@ export class GameEngine {
     }
   }
 
-  // NOUVELLE MÉTHODE: Timeout automatique des non-répondants (appelée par le host timer)
+  // Timeout automatique des non-répondants (appelée par le host timer)
   async timeoutNonRespondents(roomCode: string): Promise<void> {
     try {
       console.log('⏰ Timeout triggered by host for room:', roomCode)
 
-      // 1. Récupérer le jeu
       const { data: game } = await supabase
         .from('games')
         .select('id, current_question')
@@ -196,7 +166,6 @@ export class GameEngine {
 
       if (!game) throw new Error('Game not found')
 
-      // 2. Récupérer tous les players
       const { data: players } = await supabase
         .from('players')
         .select('id, name')
@@ -204,7 +173,6 @@ export class GameEngine {
 
       if (!players || players.length === 0) return
 
-      // 3. Voir qui a déjà répondu
       const { data: responses } = await supabase
         .from('responses')
         .select('player_id')
@@ -212,13 +180,11 @@ export class GameEngine {
         .eq('game_id', game.id)
 
       const answeredPlayerIds = new Set(responses?.map(r => r.player_id) || [])
-
-      // 4. Identifier les retardataires
       const latecomers = players.filter(player => !answeredPlayerIds.has(player.id))
 
       console.log(`💔 ${latecomers.length} players were too slow`)
 
-      // 5. Créer des réponses "timeout" pour eux
+      // Créer des réponses "timeout" pour les retardataires
       if (latecomers.length > 0) {
         const timeoutResponses = latecomers.map(player => ({
           game_id: game.id,
@@ -228,12 +194,10 @@ export class GameEngine {
           is_correct: false
         }))
 
-        await supabase
-          .from('responses')
-          .insert(timeoutResponses)
+        await supabase.from('responses').insert(timeoutResponses)
       }
 
-      // 6. Passer le jeu en mode "revealing"
+      // Passer le jeu en mode "revealing"
       await supabase
         .from('games')
         .update({ status: 'revealing' })
@@ -252,14 +216,6 @@ export class GameEngine {
     }
   }
 
-  // Révéler la réponse (legacy - remplacé par timeoutNonRespondents)
-  async revealAnswer(roomCode: string): Promise<void> {
-    await supabase
-      .from('games')
-      .update({ status: 'revealing' })
-      .eq('room_code', roomCode)
-  }
-
   // Passer à la question suivante
   async nextQuestion(roomCode: string): Promise<boolean> {
     const { data: game } = await supabase
@@ -272,7 +228,6 @@ export class GameEngine {
 
     const nextQuestionNum = game.current_question + 1
     
-    // Si on dépasse 5 questions, terminer le jeu
     if (nextQuestionNum > 5) {
       await supabase
         .from('games')
@@ -281,7 +236,6 @@ export class GameEngine {
       return false
     }
 
-    // Sinon, passer à la question suivante
     await supabase
       .from('games')
       .update({ 
@@ -293,13 +247,13 @@ export class GameEngine {
     return true
   }
 
-  // Soumettre une réponse (avec protection contre timeout)
+  // Soumettre une réponse
   async submitAnswer(playerId: string, questionNumber: number, answerIndex: number): Promise<{
     isCorrect: boolean;
     pointsEarned: number;
     correctAnswer: number;
   }> {
-    // 1. Vérifier si le joueur a déjà répondu (y compris timeout)
+    // Vérifier si le joueur a déjà répondu
     const { data: existingResponse, error: checkError } = await supabase
       .from('responses')
       .select('id, answer')
@@ -319,7 +273,6 @@ export class GameEngine {
       }
     }
 
-    // 2. Récupérer la question
     const question = questions[questionNumber - 1]
     if (!question) {
       throw new Error('Question not found')
@@ -328,7 +281,6 @@ export class GameEngine {
     const isCorrect = answerIndex === question.correct
     const pointsEarned = isCorrect ? question.value : 0
 
-    // 3. Récupérer le game_id depuis le player
     const { data: player, error: playerError } = await supabase
       .from('players')
       .select('game_id, score')
@@ -340,7 +292,7 @@ export class GameEngine {
     }
 
     try {
-      // 4. Enregistrer la réponse
+      // Enregistrer la réponse
       const { error: responseError } = await supabase
         .from('responses')
         .insert({
@@ -358,7 +310,7 @@ export class GameEngine {
         throw new Error(`Failed to record response: ${responseError.message}`)
       }
 
-      // 5. Mettre à jour le score seulement si correct
+      // Mettre à jour le score si correct
       if (isCorrect) {
         const newScore = player.score + pointsEarned
         const { error: updateError } = await supabase

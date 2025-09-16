@@ -1,4 +1,3 @@
-// src/app/game/[roomCode]/page.tsx
 'use client'
 
 import { useParams } from 'next/navigation'
@@ -37,9 +36,9 @@ export default function GameHost() {
   const handleTimeUp = async () => {
     console.log('⏰ Host timer expired - revealing answers')
     try {
-      await gameEngine.revealAnswer(roomCode)
+      await gameEngine.timeoutNonRespondents(roomCode)
     } catch (error) {
-      console.error('Error revealing answer:', error)
+      console.error('Error timing out players:', error)
     }
   }
 
@@ -95,7 +94,7 @@ export default function GameHost() {
             size="desktop"
           />
           
-          {/* Timer Section - SIMPLE */}
+          {/* Timer Section */}
           {gameState.game.status === 'answering' && (
             <div className="mt-6 text-center">
               <SimpleTimer 
@@ -145,7 +144,7 @@ export default function GameHost() {
         )}
       </div>
 
-      {/* QR CODE - Always visible */}
+      {/* QR CODE */}
       <div className="mt-8">
         <JoinInstructions roomCode={roomCode} compact />
       </div>

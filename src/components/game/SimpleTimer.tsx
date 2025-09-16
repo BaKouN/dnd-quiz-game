@@ -1,4 +1,3 @@
-// src/components/game/SimpleTimer.tsx - Nouveau composant simple
 'use client'
 
 import { useState, useEffect, useRef } from 'react'
@@ -6,15 +5,14 @@ import { useState, useEffect, useRef } from 'react'
 interface SimpleTimerProps {
   isActive: boolean
   onTimeUp: () => void
-  onTimerUpdate?: (timeLeft: number) => void
 }
 
-export function SimpleTimer({ isActive, onTimeUp, onTimerUpdate }: SimpleTimerProps) {
+export function SimpleTimer({ isActive, onTimeUp }: SimpleTimerProps) {
   const [timeLeft, setTimeLeft] = useState(45)
   const [isRunning, setIsRunning] = useState(false)
   const intervalRef = useRef<NodeJS.Timeout>(null)
 
-  // Fonction pour réduire le timer à 5 secondes
+  // Fonction pour réduire le timer à 5 secondes (appelée depuis les contrôles)
   const reduceToFiveSeconds = () => {
     console.log('⚡ Reducing timer to 5 seconds')
     setTimeLeft(5)
@@ -26,12 +24,6 @@ export function SimpleTimer({ isActive, onTimeUp, onTimerUpdate }: SimpleTimerPr
       (window as any).forceTimerTo5Seconds = reduceToFiveSeconds
     }
   }, [])
-
-  useEffect(() => {
-    if (onTimerUpdate) {
-      onTimerUpdate(timeLeft)
-    }
-  }, [timeLeft, onTimerUpdate])
 
   useEffect(() => {
     if (isActive && !isRunning) {
